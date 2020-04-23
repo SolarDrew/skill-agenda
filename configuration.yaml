@@ -1,0 +1,32 @@
+welcome-message: false
+
+## Set the logging level
+logging:
+  level: debug
+  console: true
+  filter:
+    blacklist:
+      - websockets.protocol
+
+## Set the location for opsdroid to install modules
+# module-path: "/usr/src/app/"
+
+## Configure the web server
+web:
+  host: '0.0.0.0'
+  port: 8088
+
+## Parsers
+parsers:
+  - name: regex
+    enabled: true
+
+connectors:
+  caldav:
+    - 'reminder-room': 'main' # name of room to post reminder messages, as defined in matrix connector config
+  shell: {}
+
+skills:
+  agenda:
+    path: /home/drew/oss-projects/skill-agenda
+    no-cache: true
