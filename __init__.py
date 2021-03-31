@@ -10,21 +10,52 @@ from opsdroid.matchers import match_event, match_regex
 _LOGGER = logging.getLogger(__name__)
 
 
-class MeetingManager(Skill):
-    @match_event(events.Message)
-    async def on_message(self, message):
-        _LOGGER.debug("Received a Message event from the connector")
-        await message.respond(events.Message("I don't take orders from you."))
+def html_list(sequence):
+    html_items = ''.join([f"<li>{s.capitalize()}</li>" for s in sequence])
+    return f"<ol>{html_items}</ol>"
 
-    @match_event(cdevents.UpcomingEvent)
-    async def send_chat_reminder(self, upcoming):
-        _LOGGER.debug("Reminder event detected, forwarding to chat.")
-        # get new target - default to loading from config
-        # mconn = get_matrix_connector()
-        # target_room = mconn.rooms[self.config.get("reminder-room", "main")]
-        # # construct message from reminder info
-        # reminder = events.Message(
-        #     f"You've got a meeting coming up! {upcoming.name} is coming up at {upcoming.start_time} and is scheduled to continue until {upcoming.end_time}.", target=target_room
-        # )
-        # send message
-        print(f"Remember about {upcoming.name} at {upcoming.start_time} until {upcoming.end_time}.")
+
+class MeetingManager(Skill):
+    @match_regex("!agenda$", case_sensitive=False)
+    async def show_agenda(self, message):
+        db = self.opsdroid.get_database("matrix")
+        with db.memory_in_room(message.target):
+            all_items = await self.opsdroid.memory.get("agenda_items") or []
+
+        if all_items:
+            await message.respond(html_list(all_items))
+        else:
+            await message.respond("There are currently no items on the agenda. Add one with `!agenda add <something we need to talk about>`")
+
+    @match_regex("!agenda add (?P<item>.*)", case_sensitive=False)
+    async def add_item(self, message):
+        await message.respond(events.Message("Adding item to agenda"))
+
+        db = self.opsdroid.get_database("matrix")
+
+        with db.memory_in_room(message.target):
+            all_items = await self.opsdroid.memory.get("agenda_items") or []
+
+        all_items.append(message.regex.capturesdict()['item'][0])
+
+        with db.memory_in_room(message.target):
+            await self.opsdroid.memory.put("agenda_items", all_items)
+
+    @match_regex(r"!agenda rm (?P<index>\d*)", case_sensitive=False)
+    async def rm_item(self, message):
+        await message.respond(events.Message("Removing item from agenda"))
+
+        db = self.opsdroid.get_database("matrix")
+
+        with db.memory_in_room(message.target):
+            all_items = await self.opsdroid.memory.get("agenda_items") or []
+
+        index = int(message.regex.capturesdict()['index'][0]) - 1
+        try:
+            all_items.remove(all_items[index])
+        except IndexError:
+            await message.respond("No such item. Double-check the current agenda with `!agenda`")
+            return
+
+        with db.memory_in_room(message.target):
+            await self.opsdroid.memory.put("agenda_items", all_items)
